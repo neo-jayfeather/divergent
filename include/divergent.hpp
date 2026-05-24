@@ -30,4 +30,16 @@ private:
     ProjectConfig config;
     std::filesystem::path main_path;
     std::filesystem::path fork_path;
+    
+    struct GitOidHash {
+        std::size_t operator()(const git_oid& oid) const {
+            return *reinterpret_cast<const std::size_t*>(oid.id);
+        }
+    };
+
+    struct GitOidEqual {
+        bool operator()(const git_oid& lhs, const git_oid& rhs) const {
+            return git_oid_cmp(&lhs, &rhs) == 0;
+        }
+    };
 };

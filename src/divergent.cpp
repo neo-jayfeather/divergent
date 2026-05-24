@@ -1,5 +1,6 @@
 #include "divergent.hpp"
 
+#include <unordered_set>
 #include <iostream>
 #include <filesystem>
 
@@ -47,28 +48,60 @@ void DivergentEngine::SetMain(std::filesystem::path path){
     }
 };
 
-
 std::string DivergentEngine::FindDivergenceBase() {
-    std::vector<git_oid> fork_history;
-    std::vector<git_oid> main_history;
+    git_revwalk* main_walker = nullptr;
+    git_revwalk* fork_walker = nullptr;
+    git_oid main_tip, fork_tip;
 
-    CopyFullGitHistory(repo, fork_history);
-    CopyFullGitHistory(main_repo, main_history);
+    if (git_reference_name_to_id(&main_tip, main_repo, "HEAD") != 0 ||
+        git_reference_name_to_id(&fork_tip, repo, "HEAD") != 0) {
+        return "";
+    }
 
-    for (size_t i = 0; i < fork_history.size(); i++) {
-        for (size_t j = 0; j < main_history.size(); j++) {
-            if (git_oid_cmp(&fork_history[i], &main_history[j]) == 0) {
-                char ret_char[65];
-                git_oid_tostr(ret_char, 65, &fork_history[i]);
-                
-                std::string temp_str(ret_char);
-                return temp_str;
-            }
+    git_revwalk_new(&main_walker, main_repo);
+    git_revwalk_push(main_walker, &main_tip);
+
+    git_revwalk_new(&fork_walker, repo);
+    git_revwalk_push(fork_walker, &fork_tip);
+
+    std::unordered_set<git_oid, GitOidHash, GitOidEqual> visited_commits;
+    visited_commits.reserve(10000); 
+
+    git_oid commit_m, commit_f;
+    bool main_active = true;
+    bool fork_active = true;
+    std::string divergence_sha = "";
+
+    while (main_active || fork_active) {
+        if (main_active) {
+            if (git_revwalk_next(&commit_m, main_walker) == 0) {
+                if (visited_commits.count(commit_m) > 0) {
+                    char hex[GIT_OID_HEXSZ + 1];
+                    git_oid_tostr(hex, sizeof(hex), &commit_m);
+                    divergence_sha = hex;
+                    break;
+                }
+                visited_commits.insert(commit_m);
+            } else main_active = false;
+        }
+
+        if (fork_active) {
+            if (git_revwalk_next(&commit_f, fork_walker) == 0) {
+                if (visited_commits.count(commit_f) > 0) {
+                    char hex[GIT_OID_HEXSZ + 1];
+                    git_oid_tostr(hex, sizeof(hex), &commit_f);
+                    divergence_sha = hex;
+                    break;
+                }
+                visited_commits.insert(commit_f);
+            } else fork_active = false;
         }
     }
 
-    std::cout << "No matching commit found between histories.\n";
-    return ""; 
+    git_revwalk_free(main_walker);
+    git_revwalk_free(fork_walker);
+
+    return divergence_sha;
 }
 
 std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
@@ -105,7 +138,7 @@ void CopyFullGitHistory(git_repository* repo, std::vector<git_oid>& history) {
     git_revwalk_sorting(walker, GIT_SORT_TOPOLOGICAL);
     git_revwalk_push_head(walker);
 
-    history.reserve(1000);
+    history.reserve(5000);
 
     git_oid temp_oid;
 
