@@ -49,35 +49,11 @@ void DivergentEngine::SetMain(std::filesystem::path path){
 
 
 std::string DivergentEngine::FindDivergenceBase() {
-    git_revwalk* fork_walker;
-    git_revwalk_new(&fork_walker, repo);
-    git_revwalk_sorting(fork_walker, GIT_SORT_TOPOLOGICAL);
-    git_revwalk_push_head(fork_walker);
-
     std::vector<git_oid> fork_history;
-    fork_history.reserve(1000);
-
-    git_oid temp_oid;
-
-    while (git_revwalk_next(&temp_oid, fork_walker) == 0) {
-        fork_history.push_back(temp_oid);
-    }
-
-    git_revwalk_free(fork_walker);
-
-    git_revwalk* main_walker;
-    git_revwalk_new(&main_walker, main_repo);
-    git_revwalk_sorting(main_walker, GIT_SORT_TOPOLOGICAL);
-    git_revwalk_push_head(main_walker);
-    
     std::vector<git_oid> main_history;
-    main_history.reserve(1000);
 
-    while (git_revwalk_next(&temp_oid, main_walker) == 0) {
-        main_history.push_back(temp_oid);
-    }
-
-    git_revwalk_free(main_walker);
+    CopyFullGitHistory(repo, fork_history);
+    CopyFullGitHistory(main_repo, main_history);
 
     for (size_t i = 0; i < fork_history.size(); i++) {
         for (size_t j = 0; j < main_history.size(); j++) {
@@ -121,4 +97,20 @@ std::filesystem::path FindDivDir(const std::filesystem::path& path) {
         path1 = path1.parent_path();
     }
     return path.root_path();
+}
+
+void CopyFullGitHistory(git_repository* repo, std::vector<git_oid>& history) {
+    git_revwalk* walker;
+    git_revwalk_new(&walker, repo);
+    git_revwalk_sorting(walker, GIT_SORT_TOPOLOGICAL);
+    git_revwalk_push_head(walker);
+
+    history.reserve(1000);
+
+    git_oid temp_oid;
+
+    while (git_revwalk_next(&temp_oid, walker) == 0)
+        history.push_back(temp_oid);
+
+    git_revwalk_free(walker);
 }
