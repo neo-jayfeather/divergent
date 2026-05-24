@@ -3,13 +3,17 @@
 #include <iostream>
 #include <filesystem>
 
-std::filesystem::path main_path;
-std::filesystem::path fork_path;
-
 DivergentEngine::DivergentEngine(const std::string& call_path) {
     git_libgit2_init();
 
-    int error = git_repository_open(&repo, FindGitDir(call_path).c_str());
+    fork_path = FindDivDir(call_path);
+    std::filesystem::path temp_path(call_path);
+
+    if (fork_path == temp_path.root_path()){
+        fork_path = FindGitDir(call_path);
+    }
+    
+    int error = git_repository_open(&repo, fork_path.c_str());
 
     // TODO: kind of messy error output, maybe...?
     if (error != 0) {
@@ -17,16 +21,85 @@ DivergentEngine::DivergentEngine(const std::string& call_path) {
         std::string detail = last_error ? last_error->message : "Unknown file system or access error";
         throw std::runtime_error("Divergent Init Failure: " + detail);
     }
+
+    if(std::filesystem::exists(fork_path / ".div" / "config.json")){
+        // read json?
+        // make own file type?
+    }
 }
 
 DivergentEngine::~DivergentEngine() {
     if (repo) git_repository_free(repo);
+    if (main_repo) git_repository_free(main_repo);
     git_libgit2_shutdown();
 }
 
+void DivergentEngine::SetMain(std::filesystem::path path){
+    main_path = FindGitDir(path); // more likely to have git-only
+    if(main_path == path.root_path()) main_path = FindDivDir(path);
+    
+    int error = git_repository_open(&main_repo, main_path.c_str());
+
+    if(error != 0){
+        auto last_error = git_error_last();
+        std::string detail = last_error ? last_error->message: "Unknown file system or access error";
+        throw std::runtime_error("Divergent Init Failure: " + detail);
+    }
+};
+
+
 std::string DivergentEngine::FindDivergenceBase() {
-    // Placeholder for merge-base logic using libgit2 later
+    git_revwalk* fork_walker;
+    git_revwalk_new(&fork_walker, repo);
+    // git_revwalk_simplify_first_parent(fork_walker);
+    git_revwalk_sorting(fork_walker, GIT_SORT_TOPOLOGICAL);
+    git_revwalk_push_head(fork_walker);
+
+    std::vector<git_oid> fork_history;
+    fork_history.reserve(1000);
+
+    git_oid temp_oid;
+
+    while (git_revwalk_next(&temp_oid, fork_walker) == 0) {
+        fork_history.push_back(temp_oid);
+    }
+
+    git_revwalk_free(fork_walker);
+
+    git_revwalk* main_walker;
+    git_revwalk_new(&main_walker, main_repo);
+    // git_revwalk_simplify_first_parent(main_walker);
+    git_revwalk_sorting(main_walker, GIT_SORT_TOPOLOGICAL);
+    git_revwalk_push_head(main_walker);
+    
+    std::vector<git_oid> main_history;
+    main_history.reserve(1000);
+
+    while (git_revwalk_next(&temp_oid, main_walker) == 0) {
+        main_history.push_back(temp_oid);
+    }
+
+    git_revwalk_free(main_walker);
+
+    for (size_t i = 0; i < fork_history.size(); i++) {
+        for (size_t j = 0; j < main_history.size(); j++) {
+            if (git_oid_cmp(&fork_history[i], &main_history[j]) == 0) {
+                
+                // Split point
+                char ret_char[65];
+                git_oid_tostr(ret_char, 65, &fork_history[i]);
+                
+                std::string temp_str(ret_char);
+                return temp_str;
+            }
+        }
+    }
+
+    std::cout << "No matching commit found between histories.\n";
+    
+    
     return "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"; 
+    
 }
 
 std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
@@ -38,10 +111,20 @@ std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
 // finds first parent directroy with a .git folder (or file...)
 // if it does not exist, returns root path
 std::filesystem::path FindGitDir(const std::filesystem::path& path) {
-    std::filesystem::path path1 = std::filesystem::absolute(path);
+    std::filesystem::path path1 = std::filesystem::canonical(path);
     
     while(path1.has_parent_path() && path1 != path1.root_path()){
         if(std::filesystem::exists(path1 / ".git")) return path1; 
+        path1 = path1.parent_path();
+    }
+    return path.root_path();
+}
+
+std::filesystem::path FindDivDir(const std::filesystem::path& path) {
+    std::filesystem::path path1 = std::filesystem::canonical(path);
+    
+    while(path1.has_parent_path() && path1 != path1.root_path()){
+        if(std::filesystem::exists(path1 / ".div")) return path1; 
         path1 = path1.parent_path();
     }
     return path.root_path();

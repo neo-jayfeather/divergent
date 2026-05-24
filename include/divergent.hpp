@@ -13,7 +13,7 @@ struct ProjectConfig {
 
 
 std::filesystem::path FindGitDir(const std::filesystem::path& path);
-
+std::filesystem::path FindDivDir(const std::filesystem::path& path);
 
 class DivergentEngine {
 public:
@@ -22,8 +22,11 @@ public:
 
     std::string FindDivergenceBase();
     std::vector<std::string> DetectNewForkFiles();
-
+    void SetMain(std::filesystem::path);
 private:
     git_repository* repo = nullptr;
+    git_repository* main_repo = nullptr;
     ProjectConfig config;
+    std::filesystem::path main_path;
+    std::filesystem::path fork_path;
 };
