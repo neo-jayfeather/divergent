@@ -10,8 +10,54 @@
 // number of commits since then
 // etc.
 
-// find the diverging commit
-// no idea how to do that 
+// TODO:
+// save things to config file :v
+// figure out tracking schema (database...?)
+// track variables, etc. with a hash (?) --> how do i associate something that changes?
+// track functions with return and param sig(s), etc.
+// abc --> bcd, etc. 
+// types of files tracking (.cpp, .txt, .hpp, .c, .h, etc.)
+// wow this is complciated
+
+// STEP ONE
+// file to file comparison
+// which files map to which, which don't exist?
+// which are identical or near identical
+// file comparison percentage (git api?)
+
+// STEP TWO
+// function comparisons
+// find identical functions
+//      return signature
+//      parameters
+//      inner i/o
+//      ast map?
+//      use diffs to find if structure has changed
+// function expansions
+// function compressions
+
+// STEP THREE
+// data structure/variable comparisons
+// find identical variables, etc.
+// data type, changes, names, etc.
+
+// STEP THREE
+// misc comparisons
+
+// STEP FOUR 
+// translation  map
+
+// STEP FIVE
+// apply translations to such things
+
+// STEP SIX
+// merge :D
+
+// STEP SEVEN
+// auto build
+
+// STEP EIGHT
+// ai summary?
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
