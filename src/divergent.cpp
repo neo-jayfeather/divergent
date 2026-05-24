@@ -51,7 +51,6 @@ void DivergentEngine::SetMain(std::filesystem::path path){
 std::string DivergentEngine::FindDivergenceBase() {
     git_revwalk* fork_walker;
     git_revwalk_new(&fork_walker, repo);
-    // git_revwalk_simplify_first_parent(fork_walker);
     git_revwalk_sorting(fork_walker, GIT_SORT_TOPOLOGICAL);
     git_revwalk_push_head(fork_walker);
 
@@ -68,7 +67,6 @@ std::string DivergentEngine::FindDivergenceBase() {
 
     git_revwalk* main_walker;
     git_revwalk_new(&main_walker, main_repo);
-    // git_revwalk_simplify_first_parent(main_walker);
     git_revwalk_sorting(main_walker, GIT_SORT_TOPOLOGICAL);
     git_revwalk_push_head(main_walker);
     
@@ -84,8 +82,6 @@ std::string DivergentEngine::FindDivergenceBase() {
     for (size_t i = 0; i < fork_history.size(); i++) {
         for (size_t j = 0; j < main_history.size(); j++) {
             if (git_oid_cmp(&fork_history[i], &main_history[j]) == 0) {
-                
-                // Split point
                 char ret_char[65];
                 git_oid_tostr(ret_char, 65, &fork_history[i]);
                 
@@ -96,10 +92,7 @@ std::string DivergentEngine::FindDivergenceBase() {
     }
 
     std::cout << "No matching commit found between histories.\n";
-    
-    
-    return "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0"; 
-    
+    return ""; 
 }
 
 std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
