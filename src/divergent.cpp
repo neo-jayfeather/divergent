@@ -9,11 +9,7 @@
 DivergentEngine::DivergentEngine(const std::string& call_path) {
     git_libgit2_init();
 
-    fork_path = FindDivDir(call_path);
-    std::filesystem::path temp_path(call_path);
-
-    // use the git directory if not .div directory
-    if (fork_path == temp_path.root_path()) fork_path = FindGitDir(call_path);
+    fork_path = FindDivGitDir(call_path);
     
     int error = git_repository_open(&repo, fork_path.c_str());
 
@@ -32,8 +28,7 @@ DivergentEngine::~DivergentEngine() {
 }
 
 void DivergentEngine::SetMain(std::filesystem::path path){
-    main_path = FindGitDir(path); // more likely to have git-only
-    if(main_path == path.root_path()) main_path = FindDivDir(path);
+    main_path = FindDivGitDir(path);
     config.main_path = main_path;
     
     int error = git_repository_open(&main_repo, main_path.c_str());
@@ -102,7 +97,6 @@ std::string DivergentEngine::FindDivergenceBase() {
     git_oid commit_m, commit_f;
     bool main_active = true;
     bool fork_active = true;
-    std::string divergence_sha = "";
 
     while (main_active || fork_active) {
         if (main_active) {
@@ -110,7 +104,7 @@ std::string DivergentEngine::FindDivergenceBase() {
                 if (visited_commits.count(commit_m) > 0) {
                     char hex[GIT_OID_HEXSZ + 1];
                     git_oid_tostr(hex, sizeof(hex), &commit_m);
-                    divergence_sha = hex;
+                    config.divergence_commit = hex;
                     break;
                 }
                 visited_commits.insert(commit_m);
@@ -122,7 +116,7 @@ std::string DivergentEngine::FindDivergenceBase() {
                 if (visited_commits.count(commit_f) > 0) {
                     char hex[GIT_OID_HEXSZ + 1];
                     git_oid_tostr(hex, sizeof(hex), &commit_f);
-                    divergence_sha = hex;
+                    config.divergence_commit = hex;
                     break;
                 }
                 visited_commits.insert(commit_f);
@@ -132,8 +126,7 @@ std::string DivergentEngine::FindDivergenceBase() {
 
     git_revwalk_free(main_walker);
     git_revwalk_free(fork_walker);
-    config.divergence_commit = divergence_sha;
-    return divergence_sha;
+    return config.divergence_commit;
 }
 
 std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
@@ -142,23 +135,12 @@ std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
     return newly_added_files;
 }
 
-// finds first parent directroy with a .git folder (or file...)
-// if it does not exist, returns root path
-std::filesystem::path FindGitDir(const std::filesystem::path& path) {
+std::filesystem::path FindDivGitDir(const std::filesystem::path& path){
     std::filesystem::path path1 = std::filesystem::canonical(path);
     
     while(path1.has_parent_path() && path1 != path1.root_path()){
-        if(std::filesystem::exists(path1 / ".git")) return path1; 
-        path1 = path1.parent_path();
-    }
-    return path.root_path();
-}
-
-std::filesystem::path FindDivDir(const std::filesystem::path& path) {
-    std::filesystem::path path1 = std::filesystem::canonical(path);
-    
-    while(path1.has_parent_path() && path1 != path1.root_path()){
-        if(std::filesystem::exists(path1 / ".div")) return path1; 
+        if(std::filesystem::exists(path1 / ".div")) return path1;
+        if(std::filesystem::exists(path1 / ".git")) return path1;
         path1 = path1.parent_path();
     }
     return path.root_path();

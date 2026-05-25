@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Divergence commit: " << engine.FindDivergenceBase() << "\n";
     }
     else if (command == "git_parent"){
-        std::cout << "There is a git directory at :" << FindGitDir(".") << "\n";
+        std::cout << "There is a git directory at :" << FindDivGitDir(".") << "\n";
     }else{
         std::cout << "Not a valid command. Run with no arguments for help.\n";
     }

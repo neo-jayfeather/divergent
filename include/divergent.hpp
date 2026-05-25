@@ -13,8 +13,7 @@ struct ProjectConfig {
 };
 
 
-std::filesystem::path FindGitDir(const std::filesystem::path& path);
-std::filesystem::path FindDivDir(const std::filesystem::path& path);
+std::filesystem::path FindDivGitDir(const std::filesystem::path& path);
 void CopyFullGitHistory(git_repository* repo, std::vector<git_oid>& history);
 
 class DivergentEngine {
