@@ -6,9 +6,10 @@
 #include <filesystem>
 
 struct ProjectConfig {
-    std::string upstream_remote;
-    std::string fork_remote;
+    std::filesystem::path main_path;
+    std::filesystem::path fork_path;
     std::string divergence_commit;
+    std::vector<std::string> full_config; 
 };
 
 
@@ -24,6 +25,8 @@ public:
     std::string FindDivergenceBase();
     std::vector<std::string> DetectNewForkFiles();
     void SetMain(std::filesystem::path);
+    void PullConfig();
+    void WriteConfig();
 private:
     git_repository* repo = nullptr;
     git_repository* main_repo = nullptr;

@@ -77,18 +77,17 @@ int main(int argc, char* argv[]) {
             std::cout << "Divergent initalized tracking at base root. Add another repository to begin usage.\n";
         } else {
             engine.SetMain(argv[2]);
-            std::cout << "Divergent Initalized at base (fork) and main.\n";            
-            std::string base_sha = engine.FindDivergenceBase();
-            std::cout << "Divergence commit: " << base_sha << "\n";
+            engine.PullConfig();
+            std::cout << "Divergent Initalized at base (fork) and main.\n";
+            std::cout << "Divergence commit: " << engine.FindDivergenceBase() << "\n";
         }
-        // std::cout << "Divergent initialized tracking at base root: " << base_sha << "\n";
+        
     } else if (command == "scan") {
         auto new_files = engine.DetectNewForkFiles();
         std::cout << "Scan finished. Found " << new_files.size() << " newly added files inside fork.\n";
     } else if (command == "set-base"){
         engine.SetMain(argv[2]);
-        std::string base_sha = engine.FindDivergenceBase();
-        std::cout << "Divergence commit: " << base_sha << "\n";
+        std::cout << "Divergence commit: " << engine.FindDivergenceBase() << "\n";
     }
     else if (command == "git_parent"){
         std::cout << "There is a git directory at :" << FindGitDir(".") << "\n";

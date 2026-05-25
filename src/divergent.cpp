@@ -3,6 +3,8 @@
 #include <unordered_set>
 #include <iostream>
 #include <filesystem>
+#include <fstream>
+
 
 DivergentEngine::DivergentEngine(const std::string& call_path) {
     git_libgit2_init();
@@ -10,9 +12,8 @@ DivergentEngine::DivergentEngine(const std::string& call_path) {
     fork_path = FindDivDir(call_path);
     std::filesystem::path temp_path(call_path);
 
-    if (fork_path == temp_path.root_path()){
-        fork_path = FindGitDir(call_path);
-    }
+    // use the git directory if not .div directory
+    if (fork_path == temp_path.root_path()) fork_path = FindGitDir(call_path);
     
     int error = git_repository_open(&repo, fork_path.c_str());
 
@@ -21,11 +22,6 @@ DivergentEngine::DivergentEngine(const std::string& call_path) {
         auto last_error = git_error_last();
         std::string detail = last_error ? last_error->message : "Unknown file system or access error";
         throw std::runtime_error("Divergent Init Failure: " + detail);
-    }
-
-    if(std::filesystem::exists(fork_path / ".div" / "config.json")){
-        // read json?
-        // make own file type?
     }
 }
 
@@ -38,6 +34,7 @@ DivergentEngine::~DivergentEngine() {
 void DivergentEngine::SetMain(std::filesystem::path path){
     main_path = FindGitDir(path); // more likely to have git-only
     if(main_path == path.root_path()) main_path = FindDivDir(path);
+    config.main_path = main_path;
     
     int error = git_repository_open(&main_repo, main_path.c_str());
 
@@ -48,15 +45,50 @@ void DivergentEngine::SetMain(std::filesystem::path path){
     }
 };
 
+void DivergentEngine::PullConfig(){
+    if(std::filesystem::exists(fork_path / ".div" / "div.config")){
+        std::ifstream cfg_file(fork_path / ".div" / "div.config");
+        std::string temp_str;
+
+        getline(cfg_file, temp_str);
+        config.main_path = temp_str;
+        getline(cfg_file, temp_str);
+        config.divergence_commit = temp_str;
+        // read file...
+
+        cfg_file.close();
+    } else {
+        WriteConfig();
+    }
+}
+
+void DivergentEngine::WriteConfig(){
+    if(!std::filesystem::exists(fork_path / ".div")) std::filesystem::create_directory(fork_path / ".div");
+
+    std::ofstream cfg_file(fork_path / ".div" / "div.config");
+    
+    if (cfg_file.is_open()) {
+        // config data to the file
+        // 
+        if(config.main_path == "" || config.divergence_commit == "") return;
+        cfg_file << config.main_path.string() << std::endl;
+        cfg_file << config.divergence_commit << std::endl;
+
+        cfg_file.close();
+    } else std::cout << "Failed to write config file.";
+
+}
+
 std::string DivergentEngine::FindDivergenceBase() {
+    if(!config.divergence_commit.empty()) return config.divergence_commit;
+
     git_revwalk* main_walker = nullptr;
     git_revwalk* fork_walker = nullptr;
     git_oid main_tip, fork_tip;
 
     if (git_reference_name_to_id(&main_tip, main_repo, "HEAD") != 0 ||
-        git_reference_name_to_id(&fork_tip, repo, "HEAD") != 0) {
+        git_reference_name_to_id(&fork_tip, repo, "HEAD") != 0)
         return "";
-    }
 
     git_revwalk_new(&main_walker, main_repo);
     git_revwalk_push(main_walker, &main_tip);
@@ -100,7 +132,7 @@ std::string DivergentEngine::FindDivergenceBase() {
 
     git_revwalk_free(main_walker);
     git_revwalk_free(fork_walker);
-
+    config.divergence_commit = divergence_sha;
     return divergence_sha;
 }
 
