@@ -11,7 +11,10 @@
 // etc.
 
 // TODO:
-// save things to config file :v
+// CODE - .json parser for .json files
+// CONFIG - ignore certain folders
+// CODE - track vars
+
 // figure out tracking schema (database...?)
 // track variables, etc. with a hash (?) --> how do i associate something that changes?
 // track functions with return and param sig(s), etc.
@@ -84,7 +87,7 @@ int main(int argc, char* argv[]) {
             git_oid oid;
             git_oid_fromstr(&oid, temp_sha.c_str());
             // std::unordered_map<std::string, std::vector<FileChange>> file_histories;
-            engine.CatalogFileHistories(oid);
+            engine.GetFileHistories(oid);
             engine.VerboseHistory();
         }
         

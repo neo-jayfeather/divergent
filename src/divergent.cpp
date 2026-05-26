@@ -2,7 +2,7 @@
 
 #include <unordered_set>
 #include <iostream>
-#include <filesystem>
+// #include <filesystem>'
 #include <fstream>
 #include <cstring>
 
@@ -66,7 +66,7 @@ void DivergentEngine::WriteConfig(){
     if (cfg_file.is_open()) {
         // config data to the file
         if(config.main_path == "" || config.divergence_commit == "") return;
-        cfg_file << config.main_path.string() << '\n"';
+        cfg_file << config.main_path.string() << "\n";
         cfg_file << config.divergence_commit << std::endl;
 
         cfg_file.close();
@@ -132,12 +132,13 @@ std::string DivergentEngine::FindDivergenceBase() {
     return config.divergence_commit;
 }
 
-void DivergentEngine::CatalogFileHistories(const git_oid& divergence_oid){
-    CatalogFileHistories(file_histories, divergence_oid);
+void DivergentEngine::GetFileHistories(const git_oid& divergence_oid){
+    GetFileHistories(file_histories, divergence_oid);
 }
 
-bool DivergentEngine::CatalogFileHistories(std::unordered_map<std::string, std::vector<FileChange>>& file_histories, const git_oid& divergence_oid) 
+bool DivergentEngine::GetFileHistories(std::unordered_map<std::string, std::vector<FileChange>>& file_histories, const git_oid& divergence_oid) 
 {
+    // load from file and then return if file exists
     if(LoadFileHistoriesBinary()) return true;
 
     git_revwalk* walker = nullptr;
@@ -277,8 +278,46 @@ bool DivergentEngine::LoadFileHistoriesBinary() {
 
 std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
     std::vector<std::string> newly_added_files;
-    // Placeholder for tree diff traversal logic later
+    // look through file_histories
+    // find added files
+    // return vector with added file paths
     return newly_added_files;
+}
+
+void DivergentEngine::PopulateFileDivergences(){
+    // look through file blob in reverse order
+    // file_path is string, changes is a vector of FileChanges
+    for(const auto& [file_path, changes] : file_histories){
+        for (const auto& change : changes) {
+            // sha string from char array
+            std::string sha_str(change.commit_sha, 40);
+
+            // sha:path identifier
+            std::string git_spec = sha_str + ":" + file_path;
+
+            // query the repo for the blob object
+            git_object* obj = nullptr;
+            if (git_revparse_single(&obj, fork_repo, git_spec.c_str()) == 0) {
+                //  object is actually a file blob
+                if (git_object_type(obj) == GIT_OBJECT_BLOB) {
+                    const git_oid* blob_oid = git_object_id(obj);
+
+                    char blob_hex[GIT_OID_HEXSZ + 1];
+                    git_oid_tostr(blob_hex, sizeof(blob_hex), blob_oid);
+
+                    std::cout << "  Commit [" << sha_str.substr(0, 7) << "] -> Blob SHA: " << blob_hex << "\n";
+
+                    // TODO: compare blob shas together to check if files are the same
+                    // use LINEAR search (fastest, 9 elements on average)
+                    // divergence MUST be in history (either the same as the divergence commit, or later
+                }
+                git_object_free(obj);
+            } else {
+                // file deletion or something like that
+                std::cout << "  Commit [" << sha_str.substr(0, 7) << "] -> File deleted or missing.\n";
+            }
+        }
+    }
 }
 
 std::filesystem::path FindDivGitDir(const std::filesystem::path& path){
@@ -290,20 +329,4 @@ std::filesystem::path FindDivGitDir(const std::filesystem::path& path){
         path1 = path1.parent_path();
     }
     return path.root_path();
-}
-
-void CopyFullGitHistory(git_repository* repo, std::vector<git_oid>& history) {
-    git_revwalk* walker;
-    git_revwalk_new(&walker, repo);
-    git_revwalk_sorting(walker, GIT_SORT_TOPOLOGICAL);
-    git_revwalk_push_head(walker);
-
-    history.reserve(5000);
-
-    git_oid temp_oid;
-
-    while (git_revwalk_next(&temp_oid, walker) == 0)
-        history.push_back(temp_oid);
-
-    git_revwalk_free(walker);
 }
