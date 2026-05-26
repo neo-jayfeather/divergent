@@ -4,6 +4,7 @@
 #include <vector>
 #include <git2.h>
 #include <filesystem>
+#include <unordered_map>
 
 struct ProjectConfig {
     std::filesystem::path main_path;
@@ -16,6 +17,11 @@ struct ProjectConfig {
 std::filesystem::path FindDivGitDir(const std::filesystem::path& path);
 void CopyFullGitHistory(git_repository* repo, std::vector<git_oid>& history);
 
+struct FileChange {
+    char commit_sha[40];
+    git_delta_t status; // ADDED, MODIFIED, or RENAMED
+};
+
 class DivergentEngine {
 public:
     DivergentEngine(const std::string& call_path);
@@ -26,8 +32,16 @@ public:
     void SetMain(std::filesystem::path);
     void PullConfig();
     void WriteConfig();
+    void CatalogFileHistories(const git_oid& divergence_oid);
+    bool CatalogFileHistories(std::unordered_map<std::string, std::vector<FileChange>>& file_histories, 
+        const git_oid& divergence_oid);
+
+    void VerboseHistory();
+    bool DumpFileHistoriesBinary();
+    bool LoadFileHistoriesBinary();
+    
 private:
-    git_repository* repo = nullptr;
+    git_repository* fork_repo = nullptr;
     git_repository* main_repo = nullptr;
     ProjectConfig config;
     std::filesystem::path main_path;
@@ -44,4 +58,6 @@ private:
             return git_oid_cmp(&lhs, &rhs) == 0;
         }
     };
+    
+    std::unordered_map<std::string, std::vector<FileChange>> file_histories;
 };

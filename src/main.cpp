@@ -80,6 +80,12 @@ int main(int argc, char* argv[]) {
             engine.PullConfig();
             std::cout << "Divergent Initalized at base (fork) and main.\n";
             std::cout << "Divergence commit: " << engine.FindDivergenceBase() << "\n";
+            std::string temp_sha = engine.FindDivergenceBase();
+            git_oid oid;
+            git_oid_fromstr(&oid, temp_sha.c_str());
+            // std::unordered_map<std::string, std::vector<FileChange>> file_histories;
+            engine.CatalogFileHistories(oid);
+            engine.VerboseHistory();
         }
         
     } else if (command == "scan") {
