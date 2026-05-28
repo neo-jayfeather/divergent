@@ -32,22 +32,22 @@ public:
     void SetMain(std::filesystem::path);
     void PullConfig();
     void WriteConfig();
-    void VerboseHistory();
-    void GetFileHistories(const git_oid& divergence_oid);
-    bool GetFileHistories(std::unordered_map<std::string, std::vector<FileChange>>& file_histories, 
-        const git_oid& divergence_oid);
-    bool DumpFileHistoriesBinary();
-    bool LoadFileHistoriesBinary();
+    void VerboseHistory(const std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
+    bool GetFileHistories(git_repository* target_repo, std::unordered_map<std::string, 
+        std::vector<FileChange>>& file_histories, const git_oid& divergence_oid,
+        std::filesystem::path write_path);
+    bool DumpFileHistoriesBinary(const std::filesystem::path write_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
+    bool LoadFileHistoriesBinary(const std::filesystem::path read_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
     void PopulateFileDivergences();
-private:
+    std::unordered_map<std::string, std::vector<FileChange>> fork_file_histories;
+    std::unordered_map<std::string, std::vector<FileChange>> main_file_histories;
     git_repository* fork_repo = nullptr;
     git_repository* main_repo = nullptr;
-    
     std::filesystem::path main_path;
     std::filesystem::path fork_path;
-
+private:
     ProjectConfig config;
-    std::unordered_map<std::string, std::vector<FileChange>> file_histories;
+    
     std::unordered_map<std::string, git_oid> file_divs;
     
     struct GitOidHash {

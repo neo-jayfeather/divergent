@@ -86,9 +86,12 @@ int main(int argc, char* argv[]) {
             std::string temp_sha = engine.FindDivergenceBase();
             git_oid oid;
             git_oid_fromstr(&oid, temp_sha.c_str());
-            // std::unordered_map<std::string, std::vector<FileChange>> file_histories;
-            engine.GetFileHistories(oid);
-            engine.VerboseHistory();
+            engine.GetFileHistories(engine.fork_repo, engine.fork_file_histories, oid, engine.fork_path / ".div" / "fork" / "fileHis.div");
+            engine.GetFileHistories(engine.main_repo, engine.main_file_histories, oid, engine.main_path / ".div" / "main" / "fileHis.div");
+            engine.VerboseHistory(engine.fork_file_histories);
+            engine.VerboseHistory(engine.main_file_histories);
+            engine.PopulateFileDivergences();
+            
         }
         
     } else if (command == "scan") {
