@@ -12,6 +12,12 @@
 // CODE - .json parser for .json files - for json tracking & merging, but not necessary 
 // CONFIG - ignore certain folders
 // CODE - track vars
+// from file divergences:
+// find number of changes to each file since divergence
+// resort based on that
+// this should be part of initalization too!
+// TODO by 5/26 NIGHT or 5/27 MORNING.
+// okokokokokoko
 
 // figure out tracking schema (database...?)
 // track variables, etc. with a hash (?) --> how do i associate something that changes?
