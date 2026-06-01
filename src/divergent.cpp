@@ -1,77 +1,43 @@
 #include "divergent.hpp"
+#include "files.hpp"
 
-#include <unordered_set>
-#include <iostream>
-// #include <filesystem>'
+/*
+files.hpp
+#include <git2.h>
+#include <filesystem>
+#include <vector>
 #include <fstream>
+#include <iostream>
+#include <unordered_map>
+*/
+#include <unordered_set>
 #include <cstring>
 
 
-DivergentEngine::DivergentEngine(const std::string& call_path) {
+DivergentEngine::DivergentEngine(const std::string& call_path, const std::string& other_path) {
     git_libgit2_init();
 
     fork_path = FindDivGitDir(call_path);
+    main_path = FindDivGitDir(other_path);
     
-    int error = git_repository_open(&fork_repo, fork_path.c_str());
+    int error0 = git_repository_open(&fork_repo, fork_path.c_str());
+    int error1 = git_repository_open(&main_repo, main_path.c_str());
 
     // TODO: kind of messy error output, maybe...?
-    if (error != 0) {
+    if (error0 != 0 || error1 != 0) {
         auto last_error = git_error_last();
         std::string detail = last_error ? last_error->message : "Unknown file system or access error";
         throw std::runtime_error("Divergent Init Failure: " + detail);
     }
+    // only set to config if they are both good, valid paths
+    config.fork_path = fork_path;
+    config.main_path = main_path;
 }
 
 DivergentEngine::~DivergentEngine() {
     if (fork_repo) git_repository_free(fork_repo);
     if (main_repo) git_repository_free(main_repo);
     git_libgit2_shutdown();
-}
-
-void DivergentEngine::SetMain(std::filesystem::path path){
-    main_path = FindDivGitDir(path);
-    config.main_path = main_path;
-    
-    int error = git_repository_open(&main_repo, main_path.c_str());
-
-    if(error != 0){
-        auto last_error = git_error_last();
-        std::string detail = last_error ? last_error->message: "Unknown file system or access error";
-        throw std::runtime_error("Divergent Init Failure: " + detail);
-    }
-};
-
-void DivergentEngine::PullConfig(){
-    if(std::filesystem::exists(fork_path / ".div" / "div.config")){
-        std::ifstream cfg_file(fork_path / ".div" / "div.config");
-        std::string temp_str;
-
-        getline(cfg_file, temp_str);
-        config.main_path = temp_str;
-        getline(cfg_file, temp_str);
-        config.divergence_commit = temp_str;
-        // read file...
-
-        cfg_file.close();
-    } else {
-        WriteConfig();
-    }
-}
-
-void DivergentEngine::WriteConfig(){
-    if(!std::filesystem::exists(fork_path / ".div")) std::filesystem::create_directory(fork_path / ".div");
-
-    std::ofstream cfg_file(fork_path / ".div" / "div.config");
-    
-    if (cfg_file.is_open()) {
-        // config data to the file
-        if(config.main_path == "" || config.divergence_commit == "") return;
-        cfg_file << config.main_path.string() << "\n";
-        cfg_file << config.divergence_commit << std::endl;
-
-        cfg_file.close();
-    } else std::cout << "Failed to write config file.";
-
 }
 
 std::string DivergentEngine::FindDivergenceBase() {
@@ -200,6 +166,7 @@ bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unorder
     return true;
 }
 
+// temporary function, will be gone sooner or later
 void DivergentEngine::VerboseHistory(const std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
     int count[10] = {0};
     int total = 0;
@@ -220,60 +187,6 @@ void DivergentEngine::VerboseHistory(const std::unordered_map<std::string, std::
     std::cout << "There are " << total << " files in this repo.\n";
 }
 
-bool DivergentEngine::DumpFileHistoriesBinary(const std::filesystem::path write_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
-    if(!std::filesystem::exists(write_path)) std::filesystem::create_directories(write_path.parent_path());
-    std::ofstream out(write_path, std::ios::out | std::ios::binary | std::ios::trunc);
-    if (!out.is_open()) return false;
-
-    size_t total_files = file_histories.size();
-    out.write(reinterpret_cast<const char*>(&total_files), sizeof(total_files));
-
-    for (const auto& [file_path, changes] : file_histories) {
-        size_t path_len = file_path.size();
-        out.write(reinterpret_cast<const char*>(&path_len), sizeof(path_len));
-        out.write(file_path.data(), path_len);
-
-        size_t change_count = changes.size();
-        out.write(reinterpret_cast<const char*>(&change_count), sizeof(change_count));
-        
-        if (change_count > 0) {
-            out.write(reinterpret_cast<const char*>(changes.data()), change_count * sizeof(FileChange));
-        }
-    }
-    return true;
-}
-
-bool DivergentEngine::LoadFileHistoriesBinary(const std::filesystem::path read_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
-    std::ifstream in(read_path, std::ios::in | std::ios::binary);
-    if (!in.is_open()) return false;
-
-    file_histories.clear();
-
-    size_t total_files = 0;
-    in.read(reinterpret_cast<char*>(&total_files), sizeof(total_files));
-    if (!in) return false;
-
-    for (size_t i = 0; i < total_files; ++i) {
-        size_t path_len = 0;
-        in.read(reinterpret_cast<char*>(&path_len), sizeof(path_len));
-        
-        std::string file_path(path_len, '\0');
-        in.read(&file_path[0], path_len);
-
-        size_t change_count = 0;
-        in.read(reinterpret_cast<char*>(&change_count), sizeof(change_count));
-
-        std::vector<FileChange> changes;
-        if (change_count > 0) {
-            changes.resize(change_count);
-            
-            in.read(reinterpret_cast<char*>(changes.data()), change_count * sizeof(FileChange));
-        }
-
-        file_histories[file_path] = std::move(changes);
-    }
-    return true;
-}
 
 std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
     std::vector<std::string> newly_added_files;
@@ -288,6 +201,7 @@ void DivergentEngine::PopulateFileDivergences(){
     int missing_counter = 0;
     // look through file blob in reverse order
     // file_path is string, changes is a vector of FileChanges
+    // FORK file histories
     for(const auto& [file_path, changes] : fork_file_histories){
         for (const auto& change : changes) {
             // sha string from char array
@@ -298,6 +212,7 @@ void DivergentEngine::PopulateFileDivergences(){
 
             // query the repo for the blob object
             git_object* obj = nullptr;
+            // FORK repo
             if (git_revparse_single(&obj, fork_repo, git_spec.c_str()) == 0) {
                 //  object is actually a file blob
                 if (git_object_type(obj) == GIT_OBJECT_BLOB) {
@@ -324,13 +239,3 @@ void DivergentEngine::PopulateFileDivergences(){
     std::cout << "Missing " << missing_counter << " files\n";
 }
 
-std::filesystem::path FindDivGitDir(const std::filesystem::path& path){
-    std::filesystem::path path1 = std::filesystem::canonical(path);
-    
-    while(path1.has_parent_path() && path1 != path1.root_path()){
-        if(std::filesystem::exists(path1 / ".div")) return path1;
-        if(std::filesystem::exists(path1 / ".git")) return path1;
-        path1 = path1.parent_path();
-    }
-    return path.root_path();
-}
