@@ -71,7 +71,6 @@ int main(int argc, char* argv[]) {
         std::cout << "Usage: divergent <command> [options]\n"
                   << "Commands:\n"
                   << "  init     Initialize a divergent instance (a divergence one might even call it)\n"
-                  << "  set-base Set the base (project of which was forked, or things are being moved from)\n"
                   << "  scan     Map relations across forks\n";
         return 1;
     }
@@ -81,27 +80,35 @@ int main(int argc, char* argv[]) {
     // pull from config later... 
     DivergentEngine engine(".", argv[2]);
     ProjectConfig config;
-
+    // engine should host functions
+    // config can also host functions but for data saving/retreival 
+    // config should save non-ephemeral data that will be needed later
 
     if (command == "init") {
+        // find saved config data, if any
         config.PullConfig();
+        // find divergence base (fast)
         std::cout << "Divergent Initalized at base (fork) and main.\n";
         std::cout << "Divergence commit: " << engine.FindDivergenceBase() << "\n";
         std::string temp_sha = engine.FindDivergenceBase();
+
         git_oid oid;
         git_oid_fromstr(&oid, temp_sha.c_str());
+        // find file histories for fork (and main)
         engine.GetFileHistories(engine.fork_repo, engine.fork_file_histories, oid, engine.fork_path / ".div" / "fork" / "fileHis.div");
         engine.GetFileHistories(engine.main_repo, engine.main_file_histories, oid, engine.fork_path / ".div" / "main" / "fileHis.div");
+        // print histories
         engine.VerboseHistory(engine.fork_file_histories);
         engine.VerboseHistory(engine.main_file_histories);
+        // find individual file divergences (does NOT save)
         engine.PopulateFileDivergences();        
     } else if (command == "scan") {
+        // maybe delete this or something, idk how i plan on updating this
         auto new_files = engine.DetectNewForkFiles();
         std::cout << "Scan finished. Found " << new_files.size() << " newly added files inside fork.\n";
     }
-    else if (command == "git_parent"){
-        std::cout << "There is a git directory at :" << FindDivGitDir(".") << "\n";
-    }else{
+    else{
+        // maybe earlier exit better, who knows
         std::cout << "Not a valid command. Run with no arguments for help.\n";
     }
 
