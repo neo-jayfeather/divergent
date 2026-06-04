@@ -7,11 +7,22 @@ files.hpp
 #include <filesystem>
 #include <vector>
 #include <fstream>
-#include <iostream>
 #include <unordered_map>
 */
+// unordered_set may be converted to map....
 #include <unordered_set>
 #include <cstring>
+#include <map>
+
+// these revwalks man...
+
+struct BlobData {
+    unsigned char id[20];
+};
+
+struct TreeState {
+    std::unordered_map<std::string, BlobData> paths_to_blobs;
+};
 
 
 DivergentEngine::DivergentEngine(const std::string& call_path, const std::string& other_path) {
@@ -98,76 +109,85 @@ std::string DivergentEngine::FindDivergenceBase() {
     return config.divergence_commit;
 }
 
-bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unordered_map<std::string, 
-    std::vector<FileChange>>& file_histories, const git_oid& divergence_oid,
-    std::filesystem::path write_path) 
+// this is really stupid btw
+// i don't even know if this works
+bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unordered_map<std::string, std::vector<FileChange>>& file_histories, 
+    const git_oid& divergence_oid, std::filesystem::path write_path) 
 {
-    // load from file and then return if file exists
-    if(LoadFileHistoriesBinary(write_path, file_histories)) return true;
+    if (LoadFileHistoriesBinary(write_path, file_histories)) return true;
 
-    git_revwalk* walker = nullptr;
-    git_oid commit_oid;
+    // count total commits (move to function later)
+    git_revwalk* counter_walker;
+    git_revwalk_new(&counter_walker, target_repo);
+    git_revwalk_push_head(counter_walker);
+    git_revwalk_hide(counter_walker, &divergence_oid);
+    size_t total_commits = 0;
+    git_oid temp_oid;
+    while(git_revwalk_next(&temp_oid, counter_walker) == 0) total_commits++;
+    git_revwalk_free(counter_walker);
 
-    if (git_revwalk_new(&walker, target_repo) != 0) return false;
-    
+
+
+    git_revwalk* walker;
+    git_revwalk_new(&walker, target_repo);
     git_revwalk_push_head(walker);
-    git_revwalk_hide(walker, &divergence_oid); // Cut off baseline history
-    
-    // TOPOLOGICAL preserves graph shape; REVERSE moves oldest -> newest
+    git_revwalk_hide(walker, &divergence_oid);
     git_revwalk_sorting(walker, GIT_SORT_TOPOLOGICAL | GIT_SORT_REVERSE);
 
+    git_oid commit_oid;
+    TreeState last_tree;
+    size_t commit_count = 0;
+
+    std::cout << "Processing " << total_commits << " commits..." << std::endl;
+
     while (git_revwalk_next(&commit_oid, walker) == 0) {
-        git_commit* commit = nullptr;
-        if (git_commit_lookup(&commit, target_repo, &commit_oid) != 0) continue;
+        git_commit* commit;
+        git_commit_lookup(&commit, target_repo, &commit_oid);
+        
+        git_tree* tree;
+        git_commit_tree(&tree, commit);
 
-        char hex[GIT_OID_HEXSZ + 1];
-        git_oid_tostr(hex, sizeof(hex), &commit_oid);
-        std::string commit_sha(hex);
+        TreeState current_tree;
+        git_tree_walk(tree, GIT_TREEWALK_PRE, tree_cb, &current_tree);
 
-        git_tree* current_tree = nullptr;
-        git_commit_tree(&current_tree, commit);
-
-        git_tree* parent_tree = nullptr;
-        if (git_commit_parentcount(commit) > 0) {
-            git_commit* parent = nullptr;
-            if (git_commit_parent(&parent, commit, 0) == 0) {
-                git_commit_tree(&parent_tree, parent);
-                git_commit_free(parent);
-            }
-        }
-
-        git_diff* diff = nullptr;
-        if (git_diff_tree_to_tree(&diff, target_repo, parent_tree, current_tree, nullptr) == 0) {
+        for (const auto& [path, blob] : current_tree.paths_to_blobs) {
+            auto it = last_tree.paths_to_blobs.find(path);
             
-            size_t delta_count = git_diff_num_deltas(diff);
-            for (size_t i = 0; i < delta_count; ++i) {
-                const git_diff_delta* delta = git_diff_get_delta(diff, i);
-                
-                std::string file_path = delta->new_file.path;
-
-                // populate structure
+            // if file is new, or blob hash changed: record change
+            // memcmp is for optimization
+            if (it == last_tree.paths_to_blobs.end() || std::memcmp(it->second.id, blob.id, 20) != 0) {
                 FileChange change;
-                std::memcpy(change.commit_sha, hex, 40);
-                change.status = delta->status; // e.g., GIT_DELTA_ADDED, GIT_DELTA_MODIFIED
-
-                file_histories[file_path].push_back(change);
+                std::memcpy(change.commit_sha, commit_oid.id, 20);
+                std::memcpy(change.blob_oid, blob.id, 20);
+                change.status = GIT_DELTA_MODIFIED; 
+                file_histories[path].push_back(change);
             }
-            git_diff_free(diff);
         }
 
-        // Cleanup iteration handles
-        if (parent_tree) git_tree_free(parent_tree);
-        git_tree_free(current_tree);
+        last_tree = std::move(current_tree);
+        git_tree_free(tree);
         git_commit_free(commit);
-    }
 
+        // progress bar
+        if (++commit_count % 100 == 0 || commit_count == total_commits) {
+            float progress = static_cast<float>(commit_count) / total_commits;
+            int bar_width = 40;
+            std::cout << "\r[";
+            for(int i = 0; i < bar_width; ++i) {
+                if(i < bar_width * progress) std::cout << "=";
+                else std::cout << " ";
+            }
+            std::cout << "] " << (int)(progress * 100) << "% " << std::flush;
+        }
+    }
+    
+    std::cout << std::endl;
     git_revwalk_free(walker);
-    DumpFileHistoriesBinary(write_path, file_histories);
-    return true;
+    return DumpFileHistoriesBinary(write_path, file_histories);
 }
 
-// temporary function, will be gone sooner or later
-void DivergentEngine::VerboseHistory(const std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
+// temporary function, will be gone sooner or later (maybe not so temp overall)
+std::string DivergentEngine::VerboseHistory(const std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
     int count[10] = {0};
     int total = 0;
     long avg = 0;
@@ -179,12 +199,14 @@ void DivergentEngine::VerboseHistory(const std::unordered_map<std::string, std::
         if(value.size() > 100) count[3] ++;
         avg += value.size();
     }
-    std::cout << "Counted: " << count[0] << " files with no changes since addition\n"
-        << count[1] << " files with two or less changes.\n"
-        << count[2] << " files with under 10 changes\n"
-        << count[3] << " files with over 100 changes\n"
-        << avg / total << " average # of changes of a file\n";
-    std::cout << "There are " << total << " files in this repo.\n";
+
+    std::string output = "Counted: " + std::to_string(count[0]) + " files with no changes since addition\n"
+        + std::to_string(count[1]) + " files with two or less changes.\n"
+        + std::to_string(count[2]) + " files with under 10 changes\n"
+        + std::to_string(count[3]) + " files with over 100 changes\n"
+        + std::to_string(avg / total) + " average # of changes of a file\n";
+    
+    return output;
 }
 
 
@@ -196,46 +218,51 @@ std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
     return newly_added_files;
 }
 
-void DivergentEngine::PopulateFileDivergences(){
-    int counter = 0; 
-    int missing_counter = 0;
-    // look through file blob in reverse order
-    // file_path is string, changes is a vector of FileChanges
-    // FORK file histories
-    for(const auto& [file_path, changes] : fork_file_histories){
-        for (const auto& change : changes) {
-            // sha string from char array
-            std::string sha_str(change.commit_sha, 40);
+// extremely slow...
+// no idea why yet...
+// this has been running for an insane amount of time
 
-            // sha:path identifier
-            std::string git_spec = sha_str + ":" + file_path;
+void DivergentEngine::PopulateFileDivergences() {
+    // this takes too long
+    // idk why
+    // find # of changes after divergence
+    // delete prior changes to divergence
+    int divergence_found = 0;
+    // int missing_counter = 0;
 
-            // query the repo for the blob object
-            git_object* obj = nullptr;
-            // FORK repo
-            if (git_revparse_single(&obj, fork_repo, git_spec.c_str()) == 0) {
-                //  object is actually a file blob
-                if (git_object_type(obj) == GIT_OBJECT_BLOB) {
-                    const git_oid* blob_oid = git_object_id(obj);
+    for (const auto& [file_path, fork_changes] : fork_file_histories) {
+        if (main_file_histories.find(file_path) == main_file_histories.end()) continue;
 
-                    char blob_hex[GIT_OID_HEXSZ + 1];
-                    git_oid_tostr(blob_hex, sizeof(blob_hex), blob_oid);
-                    counter++;
-                    // std::cout << "  Commit [" << sha_str.substr(0, 7) << "] -> Blob SHA: " << blob_hex << "\n";
+        const auto& main_changes = main_file_histories.at(file_path);
 
-                    // TODO: compare blob shas together to check if files are the same
-                    // use LINEAR search (fastest, 9 elements on average)
-                    // divergence MUST be in history (either the same as the divergence commit, or later
+        for (const auto& fork_change : fork_changes) {
+            for (const auto& main_change : main_changes) {
+                if (std::memcmp(fork_change.blob_oid, main_change.blob_oid, 20) == 0) {
+
+                    // Found a match: they shared this file content at some point
+                    // The 'fork_change' is the point of divergence
+                    divergence_found++;
+                    goto next_file;
                 }
-                git_object_free(obj);
-            } else {
-                // file deletion or something like that
-                // std::cout << "  Commit [" << sha_str.substr(0, 7) << "] -> File deleted or missing.\n";
-                missing_counter++;
             }
         }
+        next_file:;
     }
-    std::cout << "Processed " << counter << " commits\n";
-    std::cout << "Missing " << missing_counter << " files\n";
+    std::cout << "Files with identified divergence point: " << divergence_found << "\n";
 }
 
+
+
+// Callback for git_tree_walk
+int tree_cb(const char* root, const git_tree_entry* entry, void* payload) {
+    auto* state = static_cast<TreeState*>(payload);
+    std::string path = std::string(root) + git_tree_entry_name(entry);
+    
+    if (git_tree_entry_type(entry) == GIT_OBJECT_BLOB) {
+        BlobData blob;
+        // Copy the raw 20 bytes directly
+        std::memcpy(blob.id, git_tree_entry_id(entry)->id, 20);
+        state->paths_to_blobs[path] = blob;
+    }
+    return 0;
+}

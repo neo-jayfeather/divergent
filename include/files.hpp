@@ -4,11 +4,11 @@
 #include <filesystem>
 #include <vector>
 #include <fstream>
-#include <iostream>
 #include <unordered_map>
 
 struct FileChange {
     char commit_sha[40];
+    char blob_oid[20];
     git_delta_t status;
 };
 
@@ -21,7 +21,7 @@ class ProjectConfig{
     
     public:
         void PullConfig();
-        void WriteConfig();
+        bool WriteConfig();
         
         std::filesystem::path main_path;
         std::filesystem::path fork_path;

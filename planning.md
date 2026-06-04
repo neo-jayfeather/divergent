@@ -35,4 +35,5 @@ Deletes all saved data, folders, returns to state before `init`.
 json combiner of some sorts that can be used appropriately to help with the aid of the creation of this.
 #### ignore
 Command to add types of files to ignore/dirs, cam be configured like a `.gitignore` (will be called `.divignore`).
-#### 
+#### multithreading (concept)
+Multithread everything. Why is it so slow? Can break down into better, smaller subproblems. Use SIMD optimization. Furthermore, just help the people using this out. 

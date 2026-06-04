@@ -8,11 +8,13 @@
 #include <filesystem>
 #include <vector>
 #include <fstream>
-#include <iostream>
 #include <unordered_map>
 */
 #include <string>
+#include <iostream>
 
+
+int tree_cb(const char* root, const git_tree_entry* entry, void* payload);
 
 class DivergentEngine {
 public:
@@ -22,13 +24,15 @@ public:
     // TODO: make some more abstract methods?
     std::string FindDivergenceBase();
     std::vector<std::string> DetectNewForkFiles();
-    void VerboseHistory(const std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
+    std::string VerboseHistory(const std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
     bool GetFileHistories(git_repository* target_repo, std::unordered_map<std::string, 
         std::vector<FileChange>>& file_histories, const git_oid& divergence_oid,
         std::filesystem::path write_path);
     void PopulateFileDivergences();
+    // std::string GetBlobAt(git_repository* repo, const std::string& path, const std::string& sha);
     std::unordered_map<std::string, std::vector<FileChange>> fork_file_histories;
     std::unordered_map<std::string, std::vector<FileChange>> main_file_histories;
+    
     git_repository* fork_repo = nullptr;
     git_repository* main_repo = nullptr;
     std::filesystem::path main_path;
@@ -49,4 +53,6 @@ private:
             return git_oid_cmp(&lhs, &rhs) == 0;
         }
     };
+
+    
 };

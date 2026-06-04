@@ -29,19 +29,20 @@ void ProjectConfig::PullConfig(){
     }
 }
 
-void ProjectConfig::WriteConfig(){
+bool ProjectConfig::WriteConfig(){
     if(!std::filesystem::exists(fork_path / ".div")) std::filesystem::create_directory(fork_path / ".div");
 
     std::ofstream cfg_file(fork_path / ".div" / "div.config");
     
     if (cfg_file.is_open()) {
         // config data to the file
-        if(main_path == "" || divergence_commit == "") return;
+        if(main_path == "" || divergence_commit == "") return false;
         cfg_file << main_path.string() << "\n";
         cfg_file << divergence_commit << std::endl;
 
         cfg_file.close();
-    } else std::cout << "Failed to write config file.";
+        return true;
+    } else return false;
 }
 
 // MAYBE make this a classless
