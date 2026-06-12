@@ -5,22 +5,26 @@
 #include <vector>
 #include <fstream>
 #include <unordered_map>
+#include <cstring>
 
+// note that commit_sha could be 20...
+// something to do with unordered_map string conversions
 struct FileChange {
-    char commit_sha[40];
+    unsigned char commit_sha[40];
     char blob_oid[20];
     git_delta_t status;
 };
 
 std::filesystem::path FindDivGitDir(const std::filesystem::path& path);
-bool LoadFileHistoriesBinary(const std::filesystem::path read_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
-bool DumpFileHistoriesBinary(const std::filesystem::path write_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
+bool LoadFileHistoriesBinary(const std::filesystem::path& read_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
+bool DumpFileHistoriesBinary(const std::filesystem::path& write_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories);
+std::string OIDtoString(const git_oid& oid);
+std::string OIDtoString(const unsigned char (*sha)[40]);
 
     
 class ProjectConfig{
-    
     public:
-        void PullConfig();
+        bool PullConfig();
         bool WriteConfig();
         
         std::filesystem::path main_path;

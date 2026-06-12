@@ -1,4 +1,9 @@
+// files.cpp
+// methods that pertain to filesystem
+// - finding .div/git
+// - saving/importing files
 #include "files.hpp"
+
 
 // helper classless function
 std::filesystem::path FindDivGitDir(const std::filesystem::path& path){
@@ -12,21 +17,39 @@ std::filesystem::path FindDivGitDir(const std::filesystem::path& path){
     return path.root_path();
 }
 
-void ProjectConfig::PullConfig(){
+std::string OIDtoString(const git_oid& oid){
+    char hex[GIT_OID_HEXSZ + 1];
+    git_oid_tostr(hex, sizeof(hex), &oid);
+    return hex;
+}
+
+std::string OIDtoString(const unsigned char (*sha)[40]){
+    git_oid temp_oid;
+    std::memcpy(temp_oid.id, sha, 20);
+    char hex[GIT_OID_HEXSZ + 1];
+    git_oid_tostr(hex, sizeof(hex), &temp_oid);
+    return hex;
+}
+
+bool ProjectConfig::PullConfig(){
     if(std::filesystem::exists(fork_path / ".div" / "div.config")){
         std::ifstream cfg_file(fork_path / ".div" / "div.config");
         std::string temp_str;
 
-        getline(cfg_file, temp_str);
-        main_path = temp_str;
-        getline(cfg_file, temp_str);
-        divergence_commit = temp_str;
-        // read file...
-
+        std::vector<std::string> cfg_lines;
+        cfg_lines.reserve(5);
+        for(int i = 0; i < 2; i++){
+            getline(cfg_file, temp_str);
+            cfg_lines.emplace_back(temp_str);
+        }
         cfg_file.close();
-    } else {
-        WriteConfig();
+
+        main_path = cfg_lines[0];
+        divergence_commit = cfg_lines[1];
+
+        return true;
     }
+    return WriteConfig();
 }
 
 bool ProjectConfig::WriteConfig(){
@@ -42,11 +65,11 @@ bool ProjectConfig::WriteConfig(){
 
         cfg_file.close();
         return true;
-    } else return false;
+    }
+    return false;
 }
 
-// MAYBE make this a classless
-bool LoadFileHistoriesBinary(const std::filesystem::path read_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
+bool LoadFileHistoriesBinary(const std::filesystem::path& read_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
     std::ifstream in(read_path, std::ios::in | std::ios::binary);
     if (!in.is_open()) return false;
 
@@ -78,7 +101,7 @@ bool LoadFileHistoriesBinary(const std::filesystem::path read_path, std::unorder
     return true;
 }
 
-bool DumpFileHistoriesBinary(const std::filesystem::path write_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
+bool DumpFileHistoriesBinary(const std::filesystem::path& write_path, std::unordered_map<std::string, std::vector<FileChange>>& file_histories) {
     if(!std::filesystem::exists(write_path)) std::filesystem::create_directories(write_path.parent_path());
     std::ofstream out(write_path, std::ios::out | std::ios::binary | std::ios::trunc);
     if (!out.is_open()) return false;
@@ -96,7 +119,7 @@ bool DumpFileHistoriesBinary(const std::filesystem::path write_path, std::unorde
         
         if (change_count > 0) {
             out.write(reinterpret_cast<const char*>(changes.data()), change_count * sizeof(FileChange));
-        } // how else do i refactor this :C uh oh i am scared
+        }
     }
     return true;
 }
