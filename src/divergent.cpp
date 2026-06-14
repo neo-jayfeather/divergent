@@ -10,21 +10,11 @@ files.hpp
 #include <unordered_map>
 #include <cstring>
 */
-// unordered_set may be converted to map....
+
 #include <unordered_set>
-#include <map>
+// #include <map>
 #include <array>
-
-// these revwalks man...
-
-struct BlobData {
-    unsigned char id[20];
-};
-
-struct TreeState {
-    std::unordered_map<std::string, BlobData> paths_to_blobs;
-};
-
+#include <chrono>
 
 DivergentEngine::DivergentEngine(const std::string& call_path, const std::string& other_path) {
     git_libgit2_init();
@@ -132,15 +122,42 @@ bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unorder
     
     std::cout << "Processing " << total << " commits..." << std::endl;
 
+    std::array<unsigned long, 4> times = {0};
+    std::chrono::_V2::system_clock::time_point start = std::chrono::high_resolution_clock::now();
+    git_oid last_tree_oid = {0};
     for (size_t i = 0; i < total; ++i) {
+        start = std::chrono::high_resolution_clock::now();
+
         git_commit* commit;
         git_commit_lookup(&commit, target_repo, &commit_list[i]);
+
+        times[0] += (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start)).count();
         
+        const git_oid* current_tree_oid = git_commit_tree_id(commit);
+        if (std::memcmp(last_tree_oid.id, current_tree_oid->id, 20) == 0) {
+            git_commit_free(commit);
+            continue; 
+        }
+
+
+        start = std::chrono::high_resolution_clock::now();
+
         git_tree* tree;
         git_commit_tree(&tree, commit);
 
+        times[1] += (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start)).count();
+
+
+
+        start = std::chrono::high_resolution_clock::now();
+
         TreeState current_tree;
         git_tree_walk(tree, GIT_TREEWALK_PRE, tree_cb, &current_tree);
+
+        times[2] += (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start)).count();
+
+
+        start = std::chrono::high_resolution_clock::now();
 
         for (const auto& [path, blob] : current_tree.paths_to_blobs) {
             auto it = last_tree.paths_to_blobs.find(path);
@@ -154,6 +171,10 @@ bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unorder
             }
         }
 
+        times[3] += (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start)).count();
+
+
+        std::memcpy(last_tree_oid.id, current_tree_oid->id, 20);
         last_tree = std::move(current_tree);
         git_tree_free(tree);
         git_commit_free(commit);
@@ -168,8 +189,12 @@ bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unorder
             std::cout << "] " << (int)(progress * 100) << "% " << std::flush;
         }
     }
-    
-    std::cout << "\nDone!" << std::endl;
+    std::cout << "\n" << times[0] / total << " - 1/iter\n"
+        << times[1] / total << " - 2/iter\n"
+        << times[2] / total << " - 3/iter\n"
+        << times[3] / total << " - 4/iter\n"
+        << times[0] << " " << times[1] << " " << times[2] << " " << times[3] << std::endl;
+
     return DumpFileHistoriesBinary(write_path, file_histories);
 }
 

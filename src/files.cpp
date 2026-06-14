@@ -123,3 +123,18 @@ bool DumpFileHistoriesBinary(const std::filesystem::path& write_path, std::unord
     }
     return true;
 }
+
+// class FileData
+int FileData::GetID(const std::string& path) {
+    auto it = path_to_id.find(path);
+    if (it != path_to_id.end()) return it->second;
+    
+    int new_id = id_to_path.size();
+    path_to_id[path] = new_id;
+    id_to_path.push_back(path);
+    return new_id;
+}
+
+const std::string& FileData::GetPath(int id) { 
+    return id_to_path[id]; 
+}

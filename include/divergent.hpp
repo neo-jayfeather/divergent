@@ -31,11 +31,16 @@ public:
         std::filesystem::path write_path);
     void PopulateFileDivergences();
     void PrintOne();
+    int GetID(const std::string& path);
+    const std::string& GetPath(int id);
     std::unordered_map<std::string, std::vector<FileChange>> fork_file_histories;
     std::unordered_map<std::string, std::vector<FileChange>> main_file_histories;
 
     std::unordered_map<std::string, std::array<unsigned char, 40>> fork_divergences;
     std::unordered_map<std::string, std::array<unsigned char, 40>> main_divergences;
+
+    FileData fork;
+    FileData main;
 
     
     git_repository* fork_repo = nullptr;
@@ -58,6 +63,4 @@ private:
             return git_oid_cmp(&lhs, &rhs) == 0;
         }
     };
-
-    
 };
