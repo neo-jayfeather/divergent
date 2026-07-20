@@ -21,6 +21,8 @@ struct BlobData {
 
 struct TreeState {
     std::unordered_map<std::string, BlobData> paths_to_blobs;
+    std::vector<BlobData> blobs;
+    std::vector<std::string> paths;
 };
 
 std::filesystem::path FindDivGitDir(const std::filesystem::path& path);

@@ -35,6 +35,44 @@
 // find identical variables, etc.
 // data type, changes, names, etc.
 
+/*
+what this currently does:
+finds repo
+initalizes 
+finds divergence commit
+finds individual file divergence commit
+
+needs to:
+save diffs
+figure out diff relationships 
+
+
+
+in -> out
+var name change here -> var name change there
+function logic changes -> manual review
+string, literal, etc. -> apply again
+recompile, hope it works
+
+
+save database of rejected changes
+ignore accpeted changes
+ignore whitespace changes
+
+
+FRAMEWORK WILL BE FOR C++/C FIRST (w/ headers)
+optionally potentially supported languages
+python
+java
+javascript (& ts)
+html
+css
+json
+rust...
+go
+
+*/
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         std::cout << "Usage: divergent <command> [options]\n"
@@ -82,6 +120,9 @@ int main(int argc, char* argv[]) {
         // find individual file divergences (does NOT save)
         // probably also some multithreading capability here :D
         engine.PopulateFileDivergences();
+        // after file divergences
+        // calculate overall changes...
+        
         engine.PrintOne();
     } else if (command == "scan") {
         // require some previous scan or something, idk

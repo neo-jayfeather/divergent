@@ -12,8 +12,8 @@ files.hpp
 */
 
 #include <unordered_set>
-// #include <map>
 #include <array>
+// timing only
 #include <chrono>
 
 DivergentEngine::DivergentEngine(const std::string& call_path, const std::string& other_path) {
@@ -123,8 +123,11 @@ bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unorder
     std::cout << "Processing " << total << " commits..." << std::endl;
 
     std::array<unsigned long, 4> times = {0};
-    std::chrono::_V2::system_clock::time_point start = std::chrono::high_resolution_clock::now();
-    git_oid last_tree_oid = {0};
+    std::chrono::_V2::system_clock::time_point start;
+
+    // reserve ahead
+    file_histories.reserve(total);
+
     for (size_t i = 0; i < total; ++i) {
         start = std::chrono::high_resolution_clock::now();
 
@@ -133,21 +136,12 @@ bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unorder
 
         times[0] += (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start)).count();
         
-        const git_oid* current_tree_oid = git_commit_tree_id(commit);
-        if (std::memcmp(last_tree_oid.id, current_tree_oid->id, 20) == 0) {
-            git_commit_free(commit);
-            continue; 
-        }
-
-
         start = std::chrono::high_resolution_clock::now();
 
         git_tree* tree;
         git_commit_tree(&tree, commit);
 
         times[1] += (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start)).count();
-
-
 
         start = std::chrono::high_resolution_clock::now();
 
@@ -156,25 +150,25 @@ bool DivergentEngine::GetFileHistories(git_repository* target_repo, std::unorder
 
         times[2] += (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start)).count();
 
-
         start = std::chrono::high_resolution_clock::now();
+
+        const auto last_tree_end = last_tree.paths_to_blobs.end();
 
         for (const auto& [path, blob] : current_tree.paths_to_blobs) {
             auto it = last_tree.paths_to_blobs.find(path);
             
-            if (it == last_tree.paths_to_blobs.end() || std::memcmp(it->second.id, blob.id, 20) != 0) {
+            if (it == last_tree_end || std::memcmp(it->second.id, blob.id, 20) != 0) {
                 FileChange change;
                 std::memcpy(change.commit_sha, commit_list[i].id, 20);
                 std::memcpy(change.blob_oid, blob.id, 20);
                 change.status = GIT_DELTA_MODIFIED; 
+                
                 file_histories[path].push_back(change);
             }
         }
 
         times[3] += (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start)).count();
 
-
-        std::memcpy(last_tree_oid.id, current_tree_oid->id, 20);
         last_tree = std::move(current_tree);
         git_tree_free(tree);
         git_commit_free(commit);
@@ -203,18 +197,6 @@ void DivergentEngine::PopulateFileDivergences() {
         if (main_file_histories.find(file_path) == main_file_histories.end()) continue;
 
         const auto& main_changes = main_file_histories.at(file_path);
-
-        // use blob oids apparently
-        // reverse serach may not need this
-        // please help me
-
-        // use dual pair pointers
-        // fork pointer -> goes to fork element
-        // main pointer -> goes to main element
-        // main pointer increases until fork element found or until end of main vector
-        // last found main pointer -> goes to last matched divergence element
-        // fork pointer increases when divergence is found
-        // ends when fork pointer is at end of fork vector
 
         auto f_it = fork_changes.rbegin();
         auto m_it = main_changes.rbegin();
@@ -273,14 +255,16 @@ std::vector<std::string> DivergentEngine::DetectNewForkFiles() {
 
 
 int tree_cb(const char* root, const git_tree_entry* entry, void* payload) {
+    if (git_tree_entry_type(entry) != GIT_OBJECT_BLOB) return 0;
+
     auto* state = static_cast<TreeState*>(payload);
     std::string path = std::string(root) + git_tree_entry_name(entry);
     
-    if (git_tree_entry_type(entry) == GIT_OBJECT_BLOB) {
-        BlobData blob;
-        std::memcpy(blob.id, git_tree_entry_id(entry)->id, 20);
-        state->paths_to_blobs[path] = blob;
-    }
+    BlobData blob;
+    std::memcpy(blob.id, git_tree_entry_id(entry)->id, 20);
+    state->paths_to_blobs[path] = blob;
+    // state->paths.push_back(std::move(path));
+    // state->blobs.push_back(blob);
     return 0;
 }
 
